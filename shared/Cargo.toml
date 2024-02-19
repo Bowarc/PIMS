@@ -1,0 +1,14 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+name = "shared"
+crate-type = ["rlib"]
+
+
+[dependencies]
+serde.workspace = true
+networking.workspace = true

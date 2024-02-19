@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = [ "dummy", "injector", "scanner", "shared"]
+
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[workspace.dependencies]
+log = "0.4.20"
+serde = { version = "1.0.188", features = ["derive"] }
+logger = {git = "https://github.com/Bowarc/Crates.git", package = "logger"}
+networking = {git = "https://github.com/Bowarc/Crates.git", package = "networking"}

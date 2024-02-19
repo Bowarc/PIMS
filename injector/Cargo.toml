@@ -1,0 +1,18 @@
+[package]
+name = "injector"
+version = "0.1.0"
+edition = "2021"
+
+
+[[bin]]
+path = "src/main.rs"
+name = "injector"
+
+[dependencies]
+color-eyre = "0.6.2"
+ctrlc = "3.4.2"
+dll-syringe = "0.15.2"
+log.workspace = true
+logger.workspace = true
+networking.workspace = true
+shared = {path = "../shared"}
