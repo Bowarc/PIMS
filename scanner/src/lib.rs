@@ -58,6 +58,15 @@ fn read(base: *const u8, size: u8){
         return;
     }
     println!("Reading {size} bytes at addr: {base:?}");
+    use winapi::um::sysinfoapi::GetSystemInfo;
+    use winapi::um::sysinfoapi::{LPSYSTEM_INFO, SYSTEM_INFO};
+    let x = unsafe {
+        let mut info: SYSTEM_INFO = std::mem::zeroed();
+        GetSystemInfo(&mut info as LPSYSTEM_INFO);
+
+        info.dwPageSize as usize
+    };
+    println!("page: {x}");
 
     for i in 0..(size as isize) {
         print!("{:02x} ", unsafe {*base.offset(i)});
