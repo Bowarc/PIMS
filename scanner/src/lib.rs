@@ -50,15 +50,15 @@ extern "system" fn DllMain(_dll_module: HINSTANCE, call_reason: u32, _: *mut ())
 fn start() {
     // read(utils::get_program_base(), 10);
 
-    utils::get_all_regions().iter().for_each(|r| {
-        println!("Base: {:?}", r.BaseAddress);
-        println!("Size: {:?}", r.RegionSize);
-        println!("Alloc protect: {:?}", r.AllocationProtect);
-        println!("State: {:?}", r.State);
-        println!("Protect: {:?}", r.Protect);
-        println!("Type: {:?}", r.Type);
-        println!("");
-    });
+    // utils::get_all_regions().iter().for_each(|r| {
+    //     println!("Base: {:?}", r.BaseAddress);
+    //     println!("Size: {:?}", r.RegionSize);
+    //     println!("Alloc protect: {:?}", r.AllocationProtect);
+    //     println!("State: {:?}", r.State);
+    //     println!("Protect: {:?}", r.Protect);
+    //     println!("Type: {:?}", r.Type);
+    //     println!("");
+    // });
 
     // Result
     // Found at index: 0xa949afd18c
@@ -71,22 +71,31 @@ fn start() {
     let region = utils::get_all_regions()
         .iter()
         .min_by_key(|&r| {
-
             let diff = if r.BaseAddress as u64 > t as u64 {
                 u64::MAX
             } else {
                 t as u64 - r.BaseAddress as u64
             };
-            println!("{diff} for {:?}", r.BaseAddress);
+            // println!("{diff} for {:?}", r.BaseAddress);
             diff
         })
         .cloned()
         .unwrap();
 
-    println!("Target region: {:?}", region.BaseAddress);
+    // println!("Target region: {:?}", region.BaseAddress);
 
+    let scan_result = utils::scan(458459378u32);
+    println!(
+        "Scan found {} addresses: {:#?}",
+        scan_result.len(),
+        scan_result
+    );
 
-    println!("Scan found {:?} places", utils::scan(10u32).len());
+    let new_data = 15u32;
+
+    for address in scan_result {
+        unsafe { std::ptr::write(address as *mut u32, new_data) }
+    }
 }
 
 fn read(base: *const u8, size: u8) {
@@ -119,5 +128,5 @@ fn exit() {
 fn cleanup() {
     socket_send(PayloadMessage::Exit);
     unsafe { SOCKET = None };
-    println!("Extraction !\n\n\n\n");
+    println!("Extraction !");
 }
