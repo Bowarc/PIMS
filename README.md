@@ -9,11 +9,16 @@ then maybe use it to create patterns ?
 that would be pog
 
 ## Current state :
-the scan works if you know the average memory region of the value,
+Im able to get all the memory pages used by the target app from the dll
 
-The problem being that idk where a program values are, they are not close to the program's module base
+Internal scan but for some reason the good pages are skip and if i disable the check, i get STATUS_ACCESS_VIOLATION
 
-they seem to be randomized each time i run the dummy program, unlike the program's module addr which seems to be static
+Page rights checks needs to be better
+
+To verify that it was at least possible to scan the page of a given variable of dummy.exe i made a simple test in the start of scanner.dll
+
+It finds the page if the given variable, then scans it
+it seems to not trigger STATUS_ACCESS_VIOLATION, so it means that i can scan it, just the check arnt good yet
 
 
 Notes

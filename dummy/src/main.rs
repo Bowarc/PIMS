@@ -1,7 +1,8 @@
 fn main() {
     println!("Hello, world!");
 
-    let x = 10;
+    let x = 10u32;
+
 
     println!("[Dummy] X addr: {:p}", &x);
     let view = unsafe { (&x as *const _ as *const u8).offset(-1000) };

@@ -13,4 +13,4 @@ crate-type = ["cdylib"]
 [dependencies]
 shared = {path = "../shared"}
 networking.workspace = true
-winapi = { version = "0.3.9", features = ["winuser", "libloaderapi", "sysinfoapi"]}
+winapi = { version = "0.3.9", features = ["winuser", "libloaderapi", "sysinfoapi", "memoryapi"]}

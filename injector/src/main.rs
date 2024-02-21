@@ -44,7 +44,7 @@ fn main() {
                     networking::socket::SocketError::Serialization(_) => todo!(),
                     networking::socket::SocketError::Deserialization(_) => todo!(),
                     networking::socket::SocketError::StreamWrite(_) => todo!(),
-                    networking::socket::SocketError::StreamRead(_) => todo!(),
+                    networking::socket::SocketError::StreamRead(_) => todo!(), // Dll crash
                     _ => ()
                 }
                 debug!("{e}");
