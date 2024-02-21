@@ -51,7 +51,13 @@ fn start() {
     // read(utils::get_program_base(), 10);
 
     utils::get_all_regions().iter().for_each(|r| {
-        println!("{:?}", r.BaseAddress);
+        println!("Base: {:?}", r.BaseAddress);
+        println!("Size: {:?}", r.RegionSize);
+        println!("Alloc protect: {:?}", r.AllocationProtect);
+        println!("State: {:?}", r.State);
+        println!("Protect: {:?}", r.Protect);
+        println!("Type: {:?}", r.Type);
+        println!("");
     });
 
     // Result
@@ -61,7 +67,7 @@ fn start() {
     // Found at index: 0xa949aff94c
     // Found at index: 0xa949aff984
 
-    let t = 0xa949aff984 as *mut c_void; // Target
+    let t = 0x4c6170f524 as *mut c_void; // Target
     let region = utils::get_all_regions()
         .iter()
         .min_by_key(|&r| {
@@ -77,36 +83,10 @@ fn start() {
         .cloned()
         .unwrap();
 
-    let mut found_index = 0;
+    println!("Target region: {:?}", region.BaseAddress);
 
-    let base_addr = region.BaseAddress as *const u8;
-    let value = 10u32;
-    let value_bytes = unsafe {
-        std::slice::from_raw_parts(
-            &value as *const u32 as *const u8,
-            std::mem::size_of::<u32>(),
-        )
-    };
-    println!("Found region {:?}, let's scan it", region.BaseAddress);
-    for index in 0..(region.RegionSize as isize) {
-        let b = unsafe { *base_addr.offset(index) };
 
-        // println!("Checking {b} & {}", val.get(found_index).unwrap());
-        if b == *value_bytes.get(found_index).unwrap() {
-            // println!("Found {found_index} at {index}");
-            found_index += 1;
-        } else {
-            found_index = 0;
-        }
-        if found_index == value_bytes.len() {
-            let addr = unsafe { base_addr.add((index as usize + 1) - found_index) };
-            println!("Found at index: {addr:?}");
-            // out.push(addr);
-            found_index = 0; // search for more
-        }
-    }
-
-    // println!("Scan found {:?} places", utils::scan(10u32).len());
+    println!("Scan found {:?} places", utils::scan(10u32).len());
 }
 
 fn read(base: *const u8, size: u8) {

@@ -1,4 +1,4 @@
-use winapi::um::sysinfoapi::SYSTEM_INFO;
+use winapi::um::{sysinfoapi::SYSTEM_INFO, };
 use winapi::um::winnt::MEMORY_BASIC_INFORMATION;
 pub fn program_base() -> *const u8 {
     unsafe { winapi::um::libloaderapi::GetModuleHandleA(std::ptr::null()) as *const u8 }
@@ -77,6 +77,7 @@ pub fn scan<T>(value: T) -> Vec<*const u8> {
     use winapi::um::winnt::{
         MEM_COMMIT, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
         PAGE_EXECUTE_WRITECOPY, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
+        MEM_FREE,PAGE_GUARD
     };
 
     let value_bytes = unsafe {
@@ -103,11 +104,35 @@ pub fn scan<T>(value: T) -> Vec<*const u8> {
         //     println!("Skipping region {r_index} ({:?})(not WRITEABLE)", region.BaseAddress);
         //     continue;
         // }
+        println!("");
+        println!("Writable: {WRITEABLE:b}");
+        println!("Base: {:?}", region.BaseAddress);
+        println!("Size: {:?}", region.RegionSize);
+        println!("Alloc protect: {:?}", region.AllocationProtect);
+        println!("State: {:?}", region.State);
+        println!("Protect: {:b}", region.Protect);
+        println!("Type: {:?}", region.Type);
 
-        if !((region.State & MEM_COMMIT !=0) && (region.Protect & WRITEABLE !=0)){
-            println!("Skipping region {r_index} ({:?})", region.BaseAddress);
+        // if !((region.State == MEM_COMMIT /*0x1000*/ ) && (region.Protect == 4096/*& WRITEABLE ==0*/)){
+        //     println!("Skipping region {r_index} ({:?})", region.BaseAddress);
+        //     continue;
+        // }
+
+        if region.State == MEM_FREE{   
+            println!("Skipping region {r_index} ({:?}) (FREE)", region.BaseAddress);
             continue;
         }
+
+        if region.Protect & PAGE_GUARD != 0{
+            println!("Skipping region {r_index} ({:?}) (PAGE GUARD)", region.BaseAddress);
+            continue;
+        }
+        println!("GUARD: {}", region.Protect & PAGE_GUARD);
+
+        if region.Protect & WRITEABLE == 0{
+            println!("Skipping region {r_index} ({:?}) (NOT WRITEABLE)", region.BaseAddress);
+            continue;
+        } 
 
 
         // println!("Scanning region {r_index}, p: {}, s: {}", region.Protect, region.State);
