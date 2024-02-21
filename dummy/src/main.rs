@@ -1,7 +1,7 @@
 fn main() {
     println!("Hello, world!");
 
-    let x = 10u32;
+    let mut x = 458459378u32;
 
 
     println!("[Dummy] X addr: {:p}", &x);
@@ -14,16 +14,16 @@ fn main() {
         // mem.push(unsafe { *view.offset(i.try_into().unwrap()) });
     }
 
-    find_value(
-        &[0b1010, 0b00, 0b00, 0b00],
-        unsafe { (&x as *const _ as *const u8).offset(0) },
-        5000,
-    );
+    // find_value(
+    //     &[0b1010, 0b00, 0b00, 0b00],
+    //     unsafe { (&x as *const _ as *const u8).offset(0) },
+    //     5000,
+    // );
 
-    // read();
     println!();
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
+        println!("Val of x: {x}");
     }
 }
 

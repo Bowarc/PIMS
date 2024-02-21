@@ -45,7 +45,6 @@ fn main() {
                     networking::socket::SocketError::Deserialization(_) => todo!(),
                     networking::socket::SocketError::StreamWrite(_) => todo!(),
                     networking::socket::SocketError::StreamRead(_) => todo!(), // Dll crash
-                    _ => ()
                 }
                 debug!("{e}");
                 std::thread::sleep(std::time::Duration::from_secs_f64(0.1));

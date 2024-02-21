@@ -73,7 +73,7 @@ pub fn get_all_regions() -> Vec<MEMORY_BASIC_INFORMATION> {
     out
 }
 
-pub fn scan<T>(value: T) -> Vec<*const u8> {
+pub fn scan<T>(value: T) -> Vec<*const T> {
     use winapi::um::winnt::{
         MEM_COMMIT, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
         PAGE_EXECUTE_WRITECOPY, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
@@ -104,14 +104,14 @@ pub fn scan<T>(value: T) -> Vec<*const u8> {
         //     println!("Skipping region {r_index} ({:?})(not WRITEABLE)", region.BaseAddress);
         //     continue;
         // }
-        println!("");
-        println!("Writable: {WRITEABLE:b}");
-        println!("Base: {:?}", region.BaseAddress);
-        println!("Size: {:?}", region.RegionSize);
-        println!("Alloc protect: {:?}", region.AllocationProtect);
-        println!("State: {:?}", region.State);
-        println!("Protect: {:b}", region.Protect);
-        println!("Type: {:?}", region.Type);
+        // println!("");
+        // println!("Writable: {WRITEABLE:b}");
+        // println!("Base: {:?}", region.BaseAddress);
+        // println!("Size: {:?}", region.RegionSize);
+        // println!("Alloc protect: {:?}", region.AllocationProtect);
+        // println!("State: {:?}", region.State);
+        // println!("Protect: {:b}", region.Protect);
+        // println!("Type: {:?}", region.Type);
 
         // if !((region.State == MEM_COMMIT /*0x1000*/ ) && (region.Protect == 4096/*& WRITEABLE ==0*/)){
         //     println!("Skipping region {r_index} ({:?})", region.BaseAddress);
@@ -119,24 +119,24 @@ pub fn scan<T>(value: T) -> Vec<*const u8> {
         // }
 
         if region.State == MEM_FREE{   
-            println!("Skipping region {r_index} ({:?}) (FREE)", region.BaseAddress);
+            // println!("Skipping region {r_index} ({:?}) (FREE)", region.BaseAddress);
             continue;
         }
 
         if region.Protect & PAGE_GUARD != 0{
-            println!("Skipping region {r_index} ({:?}) (PAGE GUARD)", region.BaseAddress);
+            // println!("Skipping region {r_index} ({:?}) (PAGE GUARD)", region.BaseAddress);
             continue;
         }
-        println!("GUARD: {}", region.Protect & PAGE_GUARD);
+        // println!("GUARD: {}", region.Protect & PAGE_GUARD);
 
         if region.Protect & WRITEABLE == 0{
-            println!("Skipping region {r_index} ({:?}) (NOT WRITEABLE)", region.BaseAddress);
+            // println!("Skipping region {r_index} ({:?}) (NOT WRITEABLE)", region.BaseAddress);
             continue;
         } 
 
 
         // println!("Scanning region {r_index}, p: {}, s: {}", region.Protect, region.State);
-        println!("Scanning region {r_index}, located at {:?}", region.BaseAddress);
+        // println!("Scanning region {r_index}, located at {:?}", region.BaseAddress);
 
         // Scan the whole region
 
@@ -144,8 +144,8 @@ pub fn scan<T>(value: T) -> Vec<*const u8> {
 
         let base_addr= region.BaseAddress as *const u8;
 
-        for index in 0..(region.RegionSize as isize) {
-            let b = unsafe { *base_addr.offset(index) };
+        for offset in 0..(region.RegionSize as isize) {
+            let b = unsafe { *base_addr.offset(offset) };
 
             // println!("Checking {b} & {}", val.get(found_index).unwrap());
             if b == *value_bytes.get(found_index).unwrap() {
@@ -155,9 +155,9 @@ pub fn scan<T>(value: T) -> Vec<*const u8> {
                 found_index = 0;
             }
             if found_index == value_bytes.len() {
-                let addr = unsafe{base_addr.add((index as usize+ 1) - found_index)};
+                let addr = unsafe{base_addr.add((offset as usize+ 1) - value_bytes.len())};
                 // println!("Found at index: {addr:?}" );
-                out.push(addr);
+                out.push(addr as *const T) ;
                 found_index = 0; // search for more
             }
         }
