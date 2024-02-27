@@ -1,16 +1,8 @@
-use color_eyre::IndentedSection;
-use dll_syringe::{
-    process::{BorrowedProcess, OwnedProcess, ProcessModule},
-    Syringe,
-};
-
-use dll_syringe::process::Process as _; // remove the name but keep the import
-
 const TITLE_BAR_HEIGHT: f32 = 32.0;
 const BACKGROUND_COLOR: [f32; 4] = [0., 0., 0., 0.];
 const WINDOW_SIZE: [f32; 2] = [800., 700.];
 
-pub struct DLL_Data {
+pub struct DllData {
     socket: networking::Socket<shared::message::PayloadMessage, shared::message::ServerMessage>,
     current_scan_info: Option<shared::data::ScanInfo>,
     target_process: i32,
@@ -19,7 +11,7 @@ pub struct DLL_Data {
 #[derive(Default)]
 pub struct Window {
     target_process_temp: String,
-    dll_data: Option<DLL_Data>,
+    dll_data: Option<DllData>,
 }
 
 impl eframe::App for Window {
@@ -45,10 +37,14 @@ impl eframe::App for Window {
                     rect
                 };
                 self.render_title_bar(ui, egctx, title_bar_rect, "PIMS");
+                const XPADDING: f32 = 10.;
+                const YPADDING: f32 = 10.;
 
                 let main_rect = {
                     let mut rect = app_rect;
                     rect.min.y = title_bar_rect.max.y;
+                    rect.min.x += XPADDING;
+                    rect.min.y += YPADDING;
                     rect.max.y = app_rect.max.y / 2. + TITLE_BAR_HEIGHT / 2.;
                     rect
                 };
@@ -56,7 +52,6 @@ impl eframe::App for Window {
                 self.main_ui(ui, main_rect, egctx);
             });
     }
-
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         BACKGROUND_COLOR
@@ -92,9 +87,6 @@ impl Window {
     }
 
     pub fn main_ui(&mut self, ui: &mut egui::Ui, main_rect: egui::Rect, egctx: &egui::Context) {
-        const XPADDING: f32 = 10.;
-        const YPADDING: f32 = 10.;
-
         let main_rect = ui
             .allocate_ui_at_rect(main_rect, |ui| {
                 ui.horizontal(|ui| {
@@ -113,7 +105,7 @@ impl Window {
                         let (stream, _addr) = listener.accept().unwrap(); // This will hang until the dll has connected..
                         stream.set_nonblocking(true).unwrap();
 
-                        let data = DLL_Data {
+                        let data = DllData {
                             socket: networking::Socket::new(stream),
                             current_scan_info: None,
                             target_process: 0, // TODO: find this
@@ -126,31 +118,48 @@ impl Window {
             .response
             .rect;
 
-        self.scan_ui(ui);
+        let scan_rect = ui
+            .allocate_ui_at_rect(
+                {
+                    let mut rect = main_rect;
+                    rect.min.x = main_rect.min.x;
+                    rect.min.y = main_rect.max.y + 10.;
+                    rect.max.x = rect.min.x + 500.;
+                    rect.max.y = rect.min.y + 500.;
+                    rect
+                },
+                |ui| self.scan_ui(ui),
+            )
+            .response
+            .rect;
 
-        let scan_rect = {
-            let mut rect = main_rect;
-            rect.min.x = main_rect.max.x;
-            rect.min.y = main_rect.max.y;
-            rect.min.x += XPADDING;
-            rect.min.y += YPADDING;
-            rect.max.x = rect.min.x + 500.;
-            rect.max.y = rect.min.y + 500.;
-            rect
-        };
-        self.draw_scan_result(ui, scan_rect, egctx)
+        let scan_res_rect = ui
+            .allocate_ui_at_rect(
+                {
+                    let mut rect = scan_rect;
+                    rect.min.x = rect.min.x;
+                    rect.min.y = rect.max.y + 10.;
+                    rect.max.x = rect.min.x + 500.;
+                    rect.max.y = rect.min.y + 500.;
+                    rect
+                },
+                |ui| self.draw_scan_result(ui, egctx),
+            )
+            .response
+            .rect;
     }
 
     pub fn scan_ui(&mut self, ui: &mut egui::Ui) {
         let Some(data) = &mut self.dll_data else {
             return;
         };
+
         ui.horizontal(|ui| {
-            if ui.button("basic scan").clicked() {
+            if ui.button("Request basic scan").clicked() {
                 data.socket
                     .send(shared::message::ServerMessage::ScanRequest(
                         shared::data::ScanParams {
-                            value: vec![0b11110010, 0b10001000, 0b1010011, 0b11011],
+                            value: vec![0b11110010, 0b10001000, 0b1010011, 0b11011], // 458459378u32
                             start_addr: None,
                             end_addr: None,
                         },
@@ -160,7 +169,7 @@ impl Window {
         });
     }
 
-    pub fn draw_scan_result(&mut self, ui: &mut egui::Ui, rect: egui::Rect, egctx: &egui::Context) {
+    pub fn draw_scan_result(&mut self, ui: &mut egui::Ui, egctx: &egui::Context) {
         let Some(data) = &mut self.dll_data else {
             return;
         };
@@ -169,14 +178,16 @@ impl Window {
             return;
         };
 
-        ui.allocate_ui_at_rect(rect, |ui| {
-            // let title_size = 100;
+        // let title_size = 100;
 
-            // ui.put(egui::Rect::from_min_size(egui::pos2(0., 0.), egui::vec2(100., 100.)), );
-            for addr in &scan_info.found_addresses {
-                ui.label(format!("{addr:x}")); // Nice :D
-            }
-        });
+        // ui.put(egui::Rect::from_min_size(egui::pos2(0., 0.), egui::vec2(100., 100.)), );
+        ui.label(format!(
+            "Found {} addreses: ",
+            scan_info.found_addresses.len()
+        ));
+        for addr in &scan_info.found_addresses {
+            ui.label(format!("0x{addr:x}")); // Nice :D
+        }
     }
 
     fn draw_pop_up(
