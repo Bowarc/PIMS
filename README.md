@@ -1,4 +1,4 @@
-# Internal memory scanning
+# Process Internal Memory Scanner
 
 This is just for learning purposes.
 

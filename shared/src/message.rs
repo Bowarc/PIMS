@@ -3,6 +3,7 @@ pub enum PayloadMessage {
     Ping, Pong,
     Boot,
     Info(String),
+    ScanUpdate(crate::data::ScanInfo),
     Eject,
     Exit,
 }
@@ -10,7 +11,7 @@ pub enum PayloadMessage {
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
 pub enum ServerMessage {
     Ping, Pong,
-
+    ScanRequest(crate::data::ScanParams)
 }
 
 impl networking::Message for PayloadMessage {

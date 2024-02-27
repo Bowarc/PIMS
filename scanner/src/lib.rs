@@ -1,4 +1,4 @@
-use shared::message::PayloadMessage;
+use shared::message::{PayloadMessage, ServerMessage};
 use winapi::{ctypes::c_void, shared::minwindef::HINSTANCE};
 
 mod scan;
@@ -7,9 +7,7 @@ mod utils;
 const DLL_PROCESS_ATTACH: u32 = 1;
 const DLL_PROCESS_DETACH: u32 = 0;
 
-static mut SOCKET: Option<
-    networking::Socket<shared::message::ServerMessage, shared::message::PayloadMessage>,
-> = None;
+static mut SOCKET: Option<networking::Socket<ServerMessage, PayloadMessage>> = None;
 
 fn debug(msg: String) {
     socket_send(PayloadMessage::Info(msg));
@@ -17,6 +15,11 @@ fn debug(msg: String) {
 
 fn socket_send(msg: PayloadMessage) {
     unsafe { SOCKET.as_mut().unwrap().send(msg).unwrap() };
+}
+
+fn socket_read(
+) -> Result<(networking::socket::Header, ServerMessage), networking::socket::SocketError> {
+    unsafe { SOCKET.as_mut().unwrap().try_recv() }
 }
 
 #[no_mangle]
@@ -48,9 +51,46 @@ extern "system" fn DllMain(_dll_module: HINSTANCE, call_reason: u32, _: *mut ())
     true
 }
 fn start() {
-    // read(utils::get_program_base(), 10);
+    loop {
+        match socket_read() {
+            Ok((_header, ServerMessage::ScanRequest(params))) => {
+                let regions = utils::get_all_regions();
 
-    // utils::get_all_regions().iter().for_each(|r| {
+                let mut addresses = Vec::new();
+                for (index, region) in regions.iter().enumerate() {
+                    let Some(found_addresses) = scan::scan(&params.value, *region) else {
+                        continue;
+                    };
+
+                    addresses.extend(found_addresses);
+
+                    socket_send(PayloadMessage::ScanUpdate(shared::data::ScanInfo {
+                        progress: (index + 1, regions.len()),
+                        value_size_b: params.value.len() as u8,
+                        found_addresses: addresses.clone(),
+                    }))
+                }
+            }
+            Ok(_) => {}
+
+            Err(e) => {
+                let is_would_block =
+                    if let networking::socket::SocketError::StreamRead(ref io_e) = e {
+                        io_e.kind() == std::io::ErrorKind::WouldBlock
+                    } else {
+                        // matches!(e, shared::networking::SocketError::WouldBlock)
+
+                        false
+                    };
+                if is_would_block {
+                    continue;
+                }
+
+                return;
+            }
+        }
+    }
+
     //     println!("Base: {:?}", r.BaseAddress);
     //     println!("Size: {:?}", r.RegionSize);
     //     println!("Alloc protect: {:?}", r.AllocationProtect);
@@ -67,35 +107,21 @@ fn start() {
     // Found at index: 0xa949aff94c
     // Found at index: 0xa949aff984
 
-    let t = 0x4c6170f524 as *mut c_void; // Target
-    let region = utils::get_all_regions()
-        .iter()
-        .min_by_key(|&r| {
-            let diff = if r.BaseAddress as u64 > t as u64 {
-                u64::MAX
-            } else {
-                t as u64 - r.BaseAddress as u64
-            };
-            // println!("{diff} for {:?}", r.BaseAddress);
-            diff
-        })
-        .cloned()
-        .unwrap();
+    // let t = 0x4c6170f524 as *mut c_void; // Target
+    //                                      // println!("Target region: {:?}", region.BaseAddress);
 
-    // println!("Target region: {:?}", region.BaseAddress);
+    // let scan_result = utils::scan(458459378u32);
+    // println!(
+    //     "Scan found {} addresses: {:#?}",
+    //     scan_result.len(),
+    //     scan_result
+    // );
 
-    let scan_result = utils::scan(458459378u32);
-    println!(
-        "Scan found {} addresses: {:#?}",
-        scan_result.len(),
-        scan_result
-    );
+    // let new_data = 15u32;
 
-    let new_data = 15u32;
-
-    for address in scan_result {
-        unsafe { std::ptr::write(address as *mut u32, new_data) }
-    }
+    // for address in scan_result {
+    //     unsafe { std::ptr::write(address as *mut u32, new_data) }
+    // }
 }
 
 fn read(base: *const u8, size: u8) {

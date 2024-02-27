@@ -12,7 +12,11 @@ name = "injector"
 color-eyre = "0.6.2"
 ctrlc = "3.4.2"
 dll-syringe = "0.15.2"
+eframe = "0.26.2"
+egui = "0.26.2"
 log.workspace = true
 logger.workspace = true
 networking.workspace = true
 shared = {path = "../shared"}
+sysinfo = "0.30.5"
+
