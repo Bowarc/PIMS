@@ -1,22 +1,31 @@
+use color_eyre::IndentedSection;
+use dll_syringe::{
+    process::{BorrowedProcess, OwnedProcess, ProcessModule},
+    Syringe,
+};
+
+use dll_syringe::process::Process as _; // remove the name but keep the import
+
 const TITLE_BAR_HEIGHT: f32 = 32.0;
 const BACKGROUND_COLOR: [f32; 4] = [0., 0., 0., 0.];
 const WINDOW_SIZE: [f32; 2] = [800., 700.];
 
+pub struct DLL_Data {
+    socket: networking::Socket<shared::message::PayloadMessage, shared::message::ServerMessage>,
+    current_scan_info: Option<shared::data::ScanInfo>,
+    target_process: i32,
+}
+
 #[derive(Default)]
 pub struct Window {
-    target_process: Option<i32>,
-    dll_socket:
-        Option<networking::Socket<shared::message::PayloadMessage, shared::message::ServerMessage>>,
-    current_scan_info: Option<shared::data::ScanInfo>,
-
     target_process_temp: String,
+    dll_data: Option<DLL_Data>,
 }
 
 impl eframe::App for Window {
     fn update(&mut self, egctx: &egui::Context, frame: &mut eframe::Frame) {
-
-
-
+        egctx.request_repaint_after(std::time::Duration::from_millis(100)); // 10 updated /s
+        self.listen_scanner();
         egui::CentralPanel::default()
             .frame(
                 eframe::egui::Frame::none()
@@ -52,23 +61,26 @@ impl eframe::App for Window {
         BACKGROUND_COLOR
     }
 
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {}
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if let Some(data) = &mut self.dll_data {
+            data.socket.send(shared::message::ServerMessage::Eject);
+        }
+    }
 }
 
 impl Window {
     fn listen_scanner(&mut self) {
-        let Some(socket) = &mut self.dll_socket else {
+        let Some(data) = &mut self.dll_data else {
             return;
         };
 
-        while let Ok((header, msg)) = socket.try_recv() {
+        while let Ok((header, msg)) = data.socket.try_recv() {
             match msg {
                 shared::message::PayloadMessage::Boot => info!("Scanner has succesfully booted"),
                 shared::message::PayloadMessage::Info(txt) => info!("Scanner said: {txt}"),
                 shared::message::PayloadMessage::ScanUpdate(scaninfo) => {
                     info!("Scan info update: {scaninfo:#?}")
                 }
-                shared::message::PayloadMessage::Eject => todo!(),
                 shared::message::PayloadMessage::Exit => todo!(),
                 _ => (),
             }
@@ -76,49 +88,65 @@ impl Window {
     }
 
     pub fn main_ui(&mut self, ui: &mut egui::Ui, main_rect: egui::Rect, egctx: &egui::Context) {
-        // First, let's try to copy Cheat Engine
-
         const XPADDING: f32 = 10.;
         const YPADDING: f32 = 10.;
 
+        let main_rect = ui
+            .allocate_ui_at_rect(main_rect, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Target process: ");
+                    ui.text_edit_singleline(&mut self.target_process_temp);
+                    ui.add_space(5.);
+                    if ui.button("Open process").clicked() {
+                        let listener =
+                            std::net::TcpListener::bind(shared::DEFAULT_ADDRESS).unwrap(); // trust :D
+
+                        crate::injection::inject(
+                            crate::injection::DEFAULT_DLL_PATH,
+                            &self.target_process_temp,
+                        );
+
+                        let (stream, _addr) = listener.accept().unwrap(); // This will hang until the dll has connected..
+                        stream.set_nonblocking(true).unwrap();
+
+                        let data = DLL_Data {
+                            socket: networking::Socket::new(stream),
+                            current_scan_info: None,
+                            target_process: 0, // TODO: find this
+                        };
+
+                        self.dll_data = Some(data);
+                    }
+                });
+            })
+            .response
+            .rect;
+
         let scan_rect = {
             let mut rect = main_rect;
+            rect.min.x = main_rect.max.x;
+            rect.min.y = main_rect.max.y;
             rect.min.x += XPADDING;
             rect.min.y += YPADDING;
-            rect.max.x = 500.;
-            rect.max.y = 500.;
+            rect.max.x = rect.min.x + 500.;
+            rect.max.y = rect.min.y + 500.;
             rect
         };
         self.draw_scan_result(ui, scan_rect, egctx)
     }
 
     pub fn draw_scan_result(&mut self, ui: &mut egui::Ui, rect: egui::Rect, egctx: &egui::Context) {
-        let Some(scan_info) = &mut self.current_scan_info else {
+        let Some(data) = &mut self.dll_data else {
+            return;
+        };
+
+        let Some(scan_info) = &mut data.current_scan_info else {
             return;
         };
 
         ui.allocate_ui_at_rect(rect, |ui| {
             let title_size = 100;
-            ui.horizontal(|ui| {
-                ui.label("Target process: ");
-                ui.text_edit_singleline(&mut self.target_process_temp);
-                ui.add_space(5.);
-                if ui.button("Open process").clicked() {
-                    let listener = std::net::TcpListener::bind(shared::DEFAULT_ADDRESS).unwrap(); // trust :D
-                    
-                    crate::injection::inject(
-                        crate::injection::DEFAULT_DLL_PATH,
-                        &self.target_process_temp.clone(),
-                    );
 
-
-                    let (stream, addr) = listener.accept().unwrap(); // This will hang until the dll has connected..
-                    stream.set_nonblocking(true).unwrap();
-
-                    self.dll_socket = Some(networking::Socket::new(stream));
-
-                }
-            });
             // ui.put(egui::Rect::from_min_size(egui::pos2(0., 0.), egui::vec2(100., 100.)), );
             for addr in &scan_info.found_addresses {
                 ui.label(format!("{addr}"));
@@ -151,14 +179,8 @@ impl Window {
 impl Window {
     pub fn new(_cc: &eframe::CreationContext) -> Self {
         Self {
-            target_process: None,
-            dll_socket: None,
-            current_scan_info: Some(shared::data::ScanInfo {
-                progress: (1, 1),
-                value_size_b: 4,
-                found_addresses: vec![],
-            }),
             target_process_temp: String::new(),
+            dll_data: None,
         }
     }
     fn render_title_bar(

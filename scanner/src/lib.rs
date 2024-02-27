@@ -1,11 +1,15 @@
 use shared::message::{PayloadMessage, ServerMessage};
 use winapi::{ctypes::c_void, shared::minwindef::HINSTANCE};
-
 mod scan;
 mod utils;
 
-const DLL_PROCESS_ATTACH: u32 = 1;
+// hmmm
 const DLL_PROCESS_DETACH: u32 = 0;
+const DLL_PROCESS_ATTACH: u32 = 1;
+const DLL_THREAD_ATTACH: u32 = 2;
+const DLL_THREAD_DETACH: u32 = 3;
+
+static mut SCANNER_MODULE: Option<HINSTANCE> = None;
 
 static mut SOCKET: Option<networking::Socket<ServerMessage, PayloadMessage>> = None;
 
@@ -23,35 +27,60 @@ fn socket_read(
 }
 
 #[no_mangle]
-extern "system" fn DllMain(_dll_module: HINSTANCE, call_reason: u32, _: *mut ()) -> bool {
+extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, lpv_reserved: *mut ()) -> bool {
     if unsafe { SOCKET.is_none() } {
+        println!("Booting up socket");
         unsafe {
             SOCKET = Some(networking::Socket::<
                 shared::message::ServerMessage,
                 shared::message::PayloadMessage,
-            >::new(
-                std::net::TcpStream::connect(shared::DEFAULT_ADDRESS).unwrap(),
-            ));
+            >::new({
+                let stream = std::net::TcpStream::connect(shared::DEFAULT_ADDRESS).unwrap();
+                stream.set_nonblocking(true);
+                stream
+            }));
         }
     }
+
+    if unsafe { SCANNER_MODULE }.is_none() {
+        println!("Saving module");
+        unsafe { SCANNER_MODULE = Some(dll_module) };
+    }
+
+    println!("Dll main called with reason: {call_reason}");
 
     match call_reason {
         DLL_PROCESS_ATTACH => {
             std::thread::spawn(|| {
-                println!("Hi");
+                println!("Scanner start");
                 socket_send(PayloadMessage::Boot);
                 start();
-                exit()
+                println!("Thread has exited");
+                free_library();
+                cleanup();
             });
         }
-        DLL_PROCESS_DETACH => cleanup(),
-        _ => (),
+        DLL_PROCESS_DETACH => {
+            if lpv_reserved.is_null() {
+                println!("Calling cleanup from main");
+                cleanup();
+            } else {
+                println!("Skipped cleanup");
+            }
+        }
+        DLL_THREAD_ATTACH => {}
+        DLL_THREAD_DETACH => {}
+        _ => {
+            println!("Skipped {call_reason}");
+        }
     }
 
     true
 }
 fn start() {
     loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
         match socket_read() {
             Ok((_header, ServerMessage::ScanRequest(params))) => {
                 let regions = utils::get_all_regions();
@@ -71,7 +100,11 @@ fn start() {
                     }))
                 }
             }
-            Ok(_) => {}
+            Ok((_header, ServerMessage::Eject)) => {
+                return; // This will call exit
+            }
+
+            Ok(_) => (),
 
             Err(e) => {
                 let is_would_block =
@@ -146,13 +179,18 @@ fn read(base: *const u8, size: u8) {
     println!();
 }
 
-fn exit() {
-    socket_send(PayloadMessage::Eject);
-    println!("Asking for extraction");
+fn free_library() {
+    unsafe {
+        winapi::um::libloaderapi::FreeLibraryAndExitThread(
+            SCANNER_MODULE.unwrap(/*it's fine to panic, it should never occur anyway*/),
+            0
+        )
+    };
+    println!("Scanner lib has been freed");
 }
 
 fn cleanup() {
-    socket_send(PayloadMessage::Exit);
     unsafe { SOCKET = None };
-    println!("Extraction !");
+    unsafe { SCANNER_MODULE = None };
+    println!("Cleanup done.");
 }
