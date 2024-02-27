@@ -57,13 +57,16 @@ impl eframe::App for Window {
             });
     }
 
+
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         BACKGROUND_COLOR
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         if let Some(data) = &mut self.dll_data {
-            data.socket.send(shared::message::ServerMessage::Eject);
+            data.socket
+                .send(shared::message::ServerMessage::Eject)
+                .unwrap();
         }
     }
 }
@@ -74,12 +77,13 @@ impl Window {
             return;
         };
 
-        while let Ok((header, msg)) = data.socket.try_recv() {
+        while let Ok((_header, msg)) = data.socket.try_recv() {
             match msg {
                 shared::message::PayloadMessage::Boot => info!("Scanner has succesfully booted"),
                 shared::message::PayloadMessage::Info(txt) => info!("Scanner said: {txt}"),
                 shared::message::PayloadMessage::ScanUpdate(scaninfo) => {
-                    info!("Scan info update: {scaninfo:#?}")
+                    info!("Scan info update: {scaninfo:#?}");
+                    data.current_scan_info = Some(scaninfo);
                 }
                 shared::message::PayloadMessage::Exit => todo!(),
                 _ => (),
@@ -122,6 +126,8 @@ impl Window {
             .response
             .rect;
 
+        self.scan_ui(ui);
+
         let scan_rect = {
             let mut rect = main_rect;
             rect.min.x = main_rect.max.x;
@@ -135,6 +141,25 @@ impl Window {
         self.draw_scan_result(ui, scan_rect, egctx)
     }
 
+    pub fn scan_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(data) = &mut self.dll_data else {
+            return;
+        };
+        ui.horizontal(|ui| {
+            if ui.button("basic scan").clicked() {
+                data.socket
+                    .send(shared::message::ServerMessage::ScanRequest(
+                        shared::data::ScanParams {
+                            value: vec![0b11110010, 0b10001000, 0b1010011, 0b11011],
+                            start_addr: None,
+                            end_addr: None,
+                        },
+                    ))
+                    .unwrap();
+            }
+        });
+    }
+
     pub fn draw_scan_result(&mut self, ui: &mut egui::Ui, rect: egui::Rect, egctx: &egui::Context) {
         let Some(data) = &mut self.dll_data else {
             return;
@@ -145,11 +170,11 @@ impl Window {
         };
 
         ui.allocate_ui_at_rect(rect, |ui| {
-            let title_size = 100;
+            // let title_size = 100;
 
             // ui.put(egui::Rect::from_min_size(egui::pos2(0., 0.), egui::vec2(100., 100.)), );
             for addr in &scan_info.found_addresses {
-                ui.label(format!("{addr}"));
+                ui.label(format!("{addr:x}")); // Nice :D
             }
         });
     }

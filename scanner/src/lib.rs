@@ -36,7 +36,7 @@ extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, lpv_reserved
                 shared::message::PayloadMessage,
             >::new({
                 let stream = std::net::TcpStream::connect(shared::DEFAULT_ADDRESS).unwrap();
-                stream.set_nonblocking(true);
+                stream.set_nonblocking(true).unwrap();
                 stream
             }));
         }
@@ -83,15 +83,20 @@ fn start() {
 
         match socket_read() {
             Ok((_header, ServerMessage::ScanRequest(params))) => {
+                println!("SCAN START");
+
                 let regions = utils::get_all_regions();
 
                 let mut addresses = Vec::new();
                 for (index, region) in regions.iter().enumerate() {
-                    let Some(found_addresses) = scan::scan(&params.value, *region) else {
-                        continue;
-                    };
+                    if let Some(found_addresses) = scan::scan(&params.value, *region) {
+                        // So it's a convertion problem
+                        for addr in found_addresses.iter(){
+                            println!("Sending addresses: {addr:x}");
 
-                    addresses.extend(found_addresses);
+                        }
+                        addresses.extend(found_addresses);
+                    };
 
                     socket_send(PayloadMessage::ScanUpdate(shared::data::ScanInfo {
                         progress: (index + 1, regions.len()),
@@ -99,6 +104,7 @@ fn start() {
                         found_addresses: addresses.clone(),
                     }))
                 }
+                println!("SCAN END");
             }
             Ok((_header, ServerMessage::Eject)) => {
                 return; // This will call exit
@@ -183,7 +189,7 @@ fn free_library() {
     unsafe {
         winapi::um::libloaderapi::FreeLibraryAndExitThread(
             SCANNER_MODULE.unwrap(/*it's fine to panic, it should never occur anyway*/),
-            0
+            0,
         )
     };
     println!("Scanner lib has been freed");

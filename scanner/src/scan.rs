@@ -1,6 +1,6 @@
 use winapi::um::winnt::MEMORY_BASIC_INFORMATION;
 
-pub fn scan(value_bytes: &Vec<u8>, region: MEMORY_BASIC_INFORMATION) -> Option<Vec<u8>> {
+pub fn scan(value_bytes: &Vec<u8>, region: MEMORY_BASIC_INFORMATION) -> Option<Vec<u64>> {
     use winapi::um::winnt::{
         MEM_FREE, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READWRITE,
         PAGE_WRITECOPY,
@@ -41,11 +41,11 @@ pub fn scan(value_bytes: &Vec<u8>, region: MEMORY_BASIC_INFORMATION) -> Option<V
     let mut found_addresses = Vec::new();
 
     for offset in 0..(region.RegionSize as isize) {
-        println!(
-            "Checking {} & {}",
-            unsafe { *base_addr.offset(offset) },
-            value_bytes.get(found_offset).unwrap()
-        );
+        // println!(
+        //     "Checking {} & {}",
+        //     unsafe { *base_addr.offset(offset) },
+        //     value_bytes.get(found_offset).unwrap()
+        // );
 
         if *value_bytes.get(found_offset).unwrap() != unsafe { *base_addr.offset(offset) } {
             found_offset = 0;
@@ -54,12 +54,12 @@ pub fn scan(value_bytes: &Vec<u8>, region: MEMORY_BASIC_INFORMATION) -> Option<V
 
         found_offset += 1;
 
-        println!("Found {found_offset} at {offset}");
+        // println!("Found {found_offset} at {offset}");
 
         if found_offset == value_bytes.len() {
             let addr = unsafe { base_addr.add((offset as usize + 1) - value_bytes.len()) };
-            // println!("Found at index: {addr:?}" );
-            found_addresses.push(addr as u8);
+            println!("Found at index: {addr:?}");
+            found_addresses.push(addr  as u64);
             found_offset = 0; // search for more
         }
     }
