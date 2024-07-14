@@ -9,12 +9,9 @@ then maybe use it to create patterns ?
 that would be pog
 
 ## Current state :
-Able to query all the region used by the target process
-Able to scan without crashing the target process
-Test regions are scanned successfully
+Working fine
 
-Now i need to implment more functionalities
-
+gui under construction
 
 Notes
 
