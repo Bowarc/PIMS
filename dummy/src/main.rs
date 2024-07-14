@@ -9,8 +9,8 @@ fn main() {
     let size = std::mem::size_of_val(&x);
     // println!("\n{size} bytes of x ({view:?})");
     // let mut mem = Vec::new();
-    for i in 0..(size ) {
-        print!("{:02b} ", unsafe { *view.offset(i.try_into().unwrap()) });
+    for i in 0..(size) {
+        print!("{:x} ", unsafe { *view.offset(i.try_into().unwrap()) });
     //     // mem.push(unsafe { *view.offset(i.try_into().unwrap()) });
     }
 
@@ -19,6 +19,7 @@ fn main() {
     //     unsafe { (&x as *const _ as *const u8).offset(0) },
     //     5000,
     // );
+
 
     println!();
     loop {

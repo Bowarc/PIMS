@@ -3,7 +3,7 @@ extern crate log;
 
 mod injection;
 mod window;
-// mod ui;
+mod ui;
 
 fn main() {
     let cfg = logger::LoggerConfig::new()

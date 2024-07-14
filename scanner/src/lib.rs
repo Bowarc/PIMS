@@ -91,9 +91,8 @@ fn start() {
                 for (index, region) in regions.iter().enumerate() {
                     if let Some(found_addresses) = scan::scan(&params.value, *region) {
                         // So it's a convertion problem
-                        for addr in found_addresses.iter(){
+                        for addr in found_addresses.iter() {
                             println!("Sending addresses: {addr:x}");
-
                         }
                         addresses.extend(found_addresses);
                     };
@@ -106,7 +105,15 @@ fn start() {
                 }
                 println!("SCAN END");
             }
+            Ok((_header, ServerMessage::WriteRequest { addr: base, data })) => {
+                for (i, val) in data.iter().enumerate() {
+                    let addr = unsafe { (base as *mut u8).offset(i as isize) };
+                    unsafe { std::ptr::write(addr, *val as u8) }
+                }
+            }
+
             Ok((_header, ServerMessage::Eject)) => {
+                println!("Received order to self eject");
                 return; // This will call exit
             }
 

@@ -11,6 +11,10 @@ pub enum PayloadMessage {
 pub enum ServerMessage {
     Ping, Pong,
     ScanRequest(crate::data::ScanParams),
+    WriteRequest{
+        addr: usize,
+        data: Vec<u8>
+    },
     Eject,
 }
 

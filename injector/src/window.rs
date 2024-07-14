@@ -4,14 +4,21 @@ const WINDOW_SIZE: [f32; 2] = [800., 700.];
 
 pub struct DllData {
     socket: networking::Socket<shared::message::PayloadMessage, shared::message::ServerMessage>,
+
+    // scan
+    search_buffer: String,
     current_scan_info: Option<shared::data::ScanInfo>,
-    target_process: i32,
+
+    // write
+    write_addr: String,   // converted to usize  before being sent
+    write_buffer: String, // conveted to Vec<u8> before being sent
 }
 
 #[derive(Default)]
 pub struct Window {
     target_process_temp: String,
     dll_data: Option<DllData>,
+    current_ui: crate::ui::tab::Tab,
 }
 
 impl eframe::App for Window {
@@ -59,9 +66,11 @@ impl eframe::App for Window {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         if let Some(data) = &mut self.dll_data {
-            data.socket
-                .send(shared::message::ServerMessage::Eject)
-                .unwrap();
+            if let Err(e) = data.socket.send(shared::message::ServerMessage::Eject) {
+                error!("An error occured while requesting the ejection of the scanner dll: {e}");
+            } else {
+                info!("Succesfully ejected scanner dll");
+            }
         }
     }
 }
@@ -87,66 +96,164 @@ impl Window {
     }
 
     pub fn main_ui(&mut self, ui: &mut egui::Ui, main_rect: egui::Rect, egctx: &egui::Context) {
-        let main_rect = ui
-            .allocate_ui_at_rect(main_rect, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Target process: ");
-                    ui.text_edit_singleline(&mut self.target_process_temp);
-                    ui.add_space(5.);
-                    if ui.button("Open process").clicked() {
-                        let listener =
-                            std::net::TcpListener::bind(shared::DEFAULT_ADDRESS).unwrap(); // trust :D
+        ui.horizontal(|ui| {
+            if ui.button("Select").clicked() {
+                self.current_ui = crate::ui::tab::Tab::TargetSelect;
+            }
 
-                        crate::injection::inject(
-                            crate::injection::DEFAULT_DLL_PATH,
-                            &self.target_process_temp,
-                        );
+            if ui.button("Scan").clicked() {
+                self.current_ui = crate::ui::tab::Tab::Scan;
+            }
 
-                        let (stream, _addr) = listener.accept().unwrap(); // This will hang until the dll has connected..
-                        stream.set_nonblocking(true).unwrap();
+            if ui.button("Write").clicked() {
+                self.current_ui = crate::ui::tab::Tab::Write;
+            }
+        });
 
-                        let data = DllData {
-                            socket: networking::Socket::new(stream),
-                            current_scan_info: None,
-                            target_process: 0, // TODO: find this
-                        };
+        match self.current_ui {
+            crate::ui::tab::Tab::TargetSelect => self.target_select_ui(ui),
+            crate::ui::tab::Tab::Scan => {
+                self.scan_ui(ui);
+                self.draw_scan_result(ui, egctx);
+            }
+            crate::ui::tab::Tab::Write => self.write_ui(ui),
+        }
 
-                        self.dll_data = Some(data);
-                    }
-                });
-            })
-            .response
-            .rect;
+        // let scan_rect = ui
+        //     .allocate_ui_at_rect(
+        //         {
+        //             let mut rect = main_rect;
+        //             rect.min.x = main_rect.min.x;
+        //             rect.min.y = main_rect.max.y + 10.;
+        //             rect.max.x = rect.min.x + 500.;
+        //             rect.max.y = rect.min.y + 500.;
+        //             rect
+        //         },
+        //         |ui| self.scan_ui(ui),
+        //     )
+        //     .response
+        //     .rect;
 
-        let scan_rect = ui
-            .allocate_ui_at_rect(
-                {
-                    let mut rect = main_rect;
-                    rect.min.x = main_rect.min.x;
-                    rect.min.y = main_rect.max.y + 10.;
-                    rect.max.x = rect.min.x + 500.;
-                    rect.max.y = rect.min.y + 500.;
-                    rect
-                },
-                |ui| self.scan_ui(ui),
-            )
-            .response
-            .rect;
+        // let scan_res_rect = ui
+        //     .allocate_ui_at_rect(
+        //         {
+        //             let mut rect = scan_rect;
+        //             rect.min.x = rect.min.x;
+        //             rect.min.y = rect.max.y + 10.;
+        //             rect.max.x = rect.min.x + 500.;
+        //             rect.max.y = rect.min.y + 500.;
+        //             rect
+        //         },
+        //         |ui| self.draw_scan_result(ui, egctx),
+        //     )
+        //     .response
+        //     .rect;
 
-        let scan_res_rect = ui
-            .allocate_ui_at_rect(
-                {
-                    let mut rect = scan_rect;
-                    rect.min.x = rect.min.x;
-                    rect.min.y = rect.max.y + 10.;
-                    rect.max.x = rect.min.x + 500.;
-                    rect.max.y = rect.min.y + 500.;
-                    rect
-                },
-                |ui| self.draw_scan_result(ui, egctx),
-            )
-            .response
-            .rect;
+        // self.write_ui(ui);
+    }
+
+    pub fn target_select_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Target process: ");
+            ui.text_edit_singleline(&mut self.target_process_temp);
+            ui.add_space(5.);
+            if ui.button("Open process").clicked() {
+                if self.dll_data.is_some() {
+                    info!("Dll data is not none, another process must have already been injected");
+                    let socket = &mut self.dll_data.as_mut().unwrap().socket;
+                    socket.send(shared::message::ServerMessage::Eject).unwrap();
+
+                    drop(self.dll_data.take().unwrap());
+                };
+
+                let listener = std::net::TcpListener::bind(shared::DEFAULT_ADDRESS).unwrap(); // trust :D
+
+                if !crate::injection::inject(
+                    crate::injection::DEFAULT_DLL_PATH,
+                    &self.target_process_temp,
+                ) {
+                    error!("Injection failled, given process doens't exists");
+                    return;
+                }
+
+                let (stream, _addr) = listener.accept().unwrap(); // This will hang until the dll has connected..
+                stream.set_nonblocking(true).unwrap();
+
+                let data = DllData {
+                    socket: networking::Socket::new(stream),
+
+                    search_buffer: String::new(),
+                    current_scan_info: None,
+
+                    write_addr: String::new(),
+                    write_buffer: String::new(),
+                };
+
+                self.dll_data = Some(data);
+            }
+        });
+    }
+
+    pub fn write_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(data) = &mut self.dll_data else {
+            return;
+        };
+
+        let Some(scan_info) = &mut data.current_scan_info else {
+            return;
+        };
+
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                ui.label("Target addr: ");
+                ui.text_edit_singleline(&mut data.write_addr);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Patch bytes: ");
+                ui.text_edit_singleline(&mut data.write_buffer);
+            });
+
+            if ui.button("Patch").clicked() {
+                let Ok(addr) = u64::from_str_radix(&data.write_addr.trim_start_matches("0x"), 16)
+                else {
+                    error!("Could not understand {}", data.write_addr);
+                    return;
+                };
+                info!("Parsed addr: {}", format!("0x{addr:x}"));
+
+                let patch_bytes = data
+                    .write_buffer
+                    .split(" ")
+                    .filter(|c| !c.is_empty())
+                    .map(|c| {
+                        info!("Parsing: '{c}'", c = c.trim_start_matches("0x"));
+                        u8::from_str_radix(c.trim_start_matches("0x"), 16).ok()
+                    })
+                    .collect::<Vec<Option<u8>>>();
+
+                if patch_bytes.iter().any(|el| (*el).is_none()) {
+                    error!("Could not parse given payload, please fix");
+                    return;
+                }
+
+                let patch_bytes = patch_bytes
+                    .iter()
+                    .flatten()
+                    .map(|el| *el)
+                    .collect::<Vec<u8>>();
+
+                for addr in scan_info.found_addresses.iter() {
+                    data.socket
+                        .send(shared::message::ServerMessage::WriteRequest {
+                            addr: *addr as usize,
+                            // This could be REALLY BAD if the user patch the appication with to few or too much bytes
+                            // lmao
+                            data: patch_bytes.clone(),
+                        })
+                        .unwrap();
+                }
+            }
+        });
     }
 
     pub fn scan_ui(&mut self, ui: &mut egui::Ui) {
@@ -155,11 +262,37 @@ impl Window {
         };
 
         ui.horizontal(|ui| {
+            ui.horizontal(|ui| {
+                ui.label("Search bytes: ");
+                ui.text_edit_singleline(&mut data.search_buffer);
+            });
+
             if ui.button("Request basic scan").clicked() {
+                let target_bytes = data
+                    .search_buffer
+                    .split(" ")
+                    .filter(|c| !c.is_empty())
+                    .map(|c| {
+                        info!("Parsing: '{c}'", c = c.trim_start_matches("0x"));
+                        u8::from_str_radix(c.trim_start_matches("0x"), 16).ok()
+                    })
+                    .collect::<Vec<Option<u8>>>();
+
+                if target_bytes.iter().any(|el| (*el).is_none()) {
+                    error!("Could not parse given payload, please fix");
+                    return;
+                }
+
+                let target_bytes = target_bytes
+                    .iter()
+                    .flatten()
+                    .map(|el| *el)
+                    .collect::<Vec<u8>>();
+
                 data.socket
                     .send(shared::message::ServerMessage::ScanRequest(
                         shared::data::ScanParams {
-                            value: vec![0b11110010, 0b10001000, 0b1010011, 0b11011], // 458459378u32
+                            value: target_bytes,
                             start_addr: None,
                             end_addr: None,
                         },
@@ -217,6 +350,7 @@ impl Window {
         Self {
             target_process_temp: String::new(),
             dll_data: None,
+            current_ui: crate::ui::tab::Tab::default(),
         }
     }
     fn render_title_bar(
